@@ -36,7 +36,7 @@ kind:
 	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.10.0)
 
 .PHONY: local-setup
-local-setup: build kind
+local-setup: clean build kind
 	./utils/local-setup.sh
 
 .PHONY: clean
