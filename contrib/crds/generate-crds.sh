@@ -44,6 +44,9 @@ sed -i -e 's/^\(  name: [^.]*\)\.$/\1.core/' ${destination}/core/*.yaml
 echo "Generating apps/v1 CRDs"
 ${GOPATH}/bin/controller-gen crd:crdVersions=v1 paths=./apps/v1 output:crd:dir=${destination}/apps output:stdout
 
+echo "Generating discovery/v1beta1 CRDs"
+${GOPATH}/bin/controller-gen crd:crdVersions=v1beta1 paths=./discovery/v1beta1 output:crd:dir=${destination}/discovery output:stdout
+
 popd > /dev/null
 popd > /dev/null
 
