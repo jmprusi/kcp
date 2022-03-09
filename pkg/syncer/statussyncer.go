@@ -75,10 +75,24 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 	upstreamObj.SetResourceVersion("")
 	upstreamObj.SetNamespace(upstreamNamespace)
 
+	// Let's apply any mutation to the object name.
+	if mutator, ok := c.mutators[gvr]; ok {
+		if err := mutator.ApplyDownstreamName(downstreamObj); err != nil {
+			return err
+		}
+	}
+
 	existing, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).Get(ctx, upstreamObj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		klog.Errorf("Getting resource %s/%s: %v", upstreamNamespace, upstreamObj.GetName(), err)
 		return err
+	}
+
+	// Run any transformations on the object before we update the status on kcp.
+	if mutator, ok := c.mutators[gvr]; ok {
+		if err := mutator.ApplyStatus(downstreamObj); err != nil {
+			return err
+		}
 	}
 
 	// TODO: verify that we really only update status, and not some non-status fields in ObjectMeta.
