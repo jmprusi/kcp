@@ -93,7 +93,7 @@ type Controller struct {
 
 	upstreamClusterName string
 	syncerNamespace     string
-	mutators mutatorGvrMap
+	mutators            mutatorGvrMap
 }
 
 // New returns a new syncer Controller syncing spec from "from" to "to".
