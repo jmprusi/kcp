@@ -443,5 +443,6 @@ func (c *Controller) process(ctx context.Context, h holder) error {
 func getDefaultMutators(from, to *rest.Config, registeredWorkspace string) map[schema.GroupVersionResource]mutators.Mutator {
 	mutatorsMap := make(map[schema.GroupVersionResource]mutators.Mutator)
 
+	mutators.NewConfigMapMutator(from, to, registeredWorkspace).Register(mutatorsMap)
 	return mutatorsMap
 }
