@@ -170,6 +170,16 @@ func (c *Controller) applyToDownstream(ctx context.Context, gvr schema.GroupVers
 	}
 	downstreamObj.SetOwnerReferences(ownerReferences)
 
+	// Run any transformations on the object before we apply it to the downstream cluster.
+	if mutator, ok := c.mutators[gvr]; ok {
+		if err := mutator.ApplyDownstreamName(downstreamObj); err != nil {
+			return err
+		}
+		if err := mutator.ApplySpec(downstreamObj); err != nil {
+			return err
+		}
+	}
+
 	// TODO: wipe things like finalizers, owner-refs and any other life-cycle fields. The life-cycle
 	//       should exclusively owned by the syncer. Let's not some Kubernetes magic interfere with it.
 
