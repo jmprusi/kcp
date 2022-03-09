@@ -444,5 +444,8 @@ func getDefaultMutators(from, to *rest.Config, registeredWorkspace string) map[s
 	mutatorsMap := make(map[schema.GroupVersionResource]mutators.Mutator)
 
 	mutators.NewConfigMapMutator(from, to, registeredWorkspace).Register(mutatorsMap)
+	mutators.NewDeploymentMutator(from, to, registeredWorkspace).Register(mutatorsMap)
+	mutators.NewServiceAccountMutator(from, to, registeredWorkspace).Register(mutatorsMap)
+
 	return mutatorsMap
 }
