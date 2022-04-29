@@ -34,7 +34,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
@@ -255,21 +254,21 @@ func New(kcpClusterName logicalcluster.LogicalCluster, pcluster string, fromClie
 
 		fromInformers.ForResource(*gvr).Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				c.AddToQueue(watch.Added, *gvr, obj)
+				c.AddToQueue(*gvr, obj)
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				if c.direction == SyncDown {
 					if !deepEqualApartFromStatus(oldObj, newObj) {
-						c.AddToQueue(watch.Modified, *gvr, newObj)
+						c.AddToQueue(*gvr, newObj)
 					}
 				} else {
 					if !deepEqualFinalizersAndStatus(oldObj, newObj) {
-						c.AddToQueue(watch.Modified, *gvr, newObj)
+						c.AddToQueue(*gvr, newObj)
 					}
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				c.AddToQueue(watch.Deleted, *gvr, obj)
+				c.AddToQueue(*gvr, obj)
 			},
 		})
 		klog.InfoS("Set up informer", "direction", c.direction, "clusterName", kcpClusterName, "pcluster", pcluster, "gvr", gvr)
@@ -366,10 +365,9 @@ type holder struct {
 	clusterName logicalcluster.LogicalCluster
 	namespace   string
 	name        string
-	eventType   watch.EventType
 }
 
-func (c *Controller) AddToQueue(eventType watch.EventType, gvr schema.GroupVersionResource, obj interface{}) {
+func (c *Controller) AddToQueue(gvr schema.GroupVersionResource, obj interface{}) {
 	objToCheck := obj
 
 	tombstone, ok := objToCheck.(cache.DeletedFinalStateUnknown)
@@ -398,7 +396,6 @@ func (c *Controller) AddToQueue(eventType watch.EventType, gvr schema.GroupVersi
 			clusterName: logicalcluster.From(metaObj),
 			namespace:   metaObj.GetNamespace(),
 			name:        metaObj.GetName(),
-			eventType:   eventType,
 		},
 	)
 }
