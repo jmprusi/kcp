@@ -176,11 +176,7 @@ func (c *Controller) ensureDownstreamNamespaceExists(ctx context.Context, downst
 }
 
 func (c *Controller) ensureSyncerFinalizer(ctx context.Context, gvr schema.GroupVersionResource, upstreamObj *unstructured.Unstructured) error {
-	upstreamObjCopy := upstreamObj.DeepCopy()
-	name := upstreamObjCopy.GetName()
-	namespace := upstreamObjCopy.GetNamespace()
-
-	upstreamFinalizers := upstreamObjCopy.GetFinalizers()
+	upstreamFinalizers := upstreamObj.GetFinalizers()
 	hasFinalizer := false
 	for _, finalizer := range upstreamFinalizers {
 		if finalizer == syncerFinalizerNamePrefix+c.pcluster {
@@ -188,13 +184,17 @@ func (c *Controller) ensureSyncerFinalizer(ctx context.Context, gvr schema.Group
 		}
 	}
 	if !hasFinalizer {
+		upstreamObjCopy := upstreamObj.DeepCopy()
+		name := upstreamObjCopy.GetName()
+		namespace := upstreamObjCopy.GetNamespace()
+
 		upstreamFinalizers = append(upstreamFinalizers, syncerFinalizerNamePrefix+c.pcluster)
 		upstreamObjCopy.SetFinalizers(upstreamFinalizers)
 		if _, err := c.fromClient.Resource(gvr).Namespace(namespace).Update(ctx, upstreamObjCopy, metav1.UpdateOptions{}); err != nil {
-			klog.Errorf("Failed updating to notify syncer ownership on resource %s|%s/%s: %v", c.upstreamClusterName, namespace, name, err)
+			klog.Errorf("Failed adding finalizer upstream on resource %s|%s/%s: %v", c.upstreamClusterName, namespace, name, err)
 			return err
 		}
-		klog.Infof("Updated resource %s|%s/%s to notify syncer ownership", c.upstreamClusterName, namespace, name)
+		klog.Infof("Updated resource %s|%s/%s with syncer finalizer upstream", c.upstreamClusterName, namespace, name)
 	}
 
 	return nil
