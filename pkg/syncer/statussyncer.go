@@ -71,7 +71,10 @@ func NewStatusSyncer(from, to *rest.Config, gvrs []string, kcpClusterName logica
 }
 
 func (c *Controller) deleteFromUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace, name string) error {
-	return removeUpstreamSyncerOwnership(ctx, gvr, c.toClient, upstreamNamespace, c.pcluster, c.upstreamClusterName, name)
+	if advancedSchedulingFeatureEnabled {
+		return removeUpstreamSyncerOwnership(ctx, gvr, c.toClient, upstreamNamespace, c.pcluster, c.upstreamClusterName, name)
+	}
+	return nil
 }
 
 func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
