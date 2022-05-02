@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"strings"
 	"time"
 
@@ -626,4 +627,53 @@ func getDefaultMutators(from *rest.Config) mutatorGvrMap {
 	mutatorsMap[deploymentMutator.GVR()] = deploymentMutator.Mutate
 	mutatorsMap[secretMutator.GVR()] = secretMutator.Mutate
 	return mutatorsMap
+}
+
+func removeUpstreamSyncerOwnership(ctx context.Context, gvr schema.GroupVersionResource, upstreamClient dynamic.Interface, upstreamNamespace, workloadClusterName string, logicalClusterName logicalcluster.LogicalCluster, resourceName string) error {
+	upstreamObj, err := upstreamClient.Resource(gvr).Namespace(upstreamNamespace).Get(ctx, resourceName, metav1.GetOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if errors.IsNotFound(err) {
+		return nil
+	}
+
+	// TODO(jmprusi): This check will need to be against "GetDeletionTimestamp()" when using the syncer virtual  workspace.
+	if upstreamObj.GetAnnotations()[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+workloadClusterName] == "" {
+		// Do nothing: the object should not be deleted anymore for this location on the KCP side
+		return nil
+	}
+
+	// Remove the syncer finalizer.
+	currentFinalizers := upstreamObj.GetFinalizers()
+	desiredFinalizers := []string{}
+	for _, finalizer := range currentFinalizers {
+		if finalizer != syncerFinalizerNamePrefix+workloadClusterName {
+			desiredFinalizers = append(desiredFinalizers, finalizer)
+		}
+	}
+	upstreamObj.SetFinalizers(desiredFinalizers)
+
+	//  TODO(jmprusi): This code block will be handled by the syncer virtual workspace, so we can remove it once
+	//                 the virtual workspace syncer is integrated
+	//  - Begin -
+	// Clean up the status annotation and the locationDeletionAnnotation.
+	annotations := upstreamObj.GetAnnotations()
+	delete(annotations, workloadv1alpha1.InternalClusterStatusAnnotationPrefix+workloadClusterName)
+	delete(annotations, workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+workloadClusterName)
+	delete(annotations, workloadv1alpha1.InternalClusterStatusAnnotationPrefix+workloadClusterName)
+	upstreamObj.SetAnnotations(annotations)
+
+	// remove the cluster label.
+	upstreamLabels := upstreamObj.GetLabels()
+	delete(upstreamLabels, workloadv1alpha1.InternalClusterResourceStateLabelPrefix+workloadClusterName)
+	upstreamObj.SetLabels(upstreamLabels)
+	// - End of block to be removed once the virtual workspace syncer is integrated -
+
+	if _, err := upstreamClient.Resource(gvr).Namespace(upstreamObj.GetNamespace()).Update(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
+		klog.Errorf("Failed updating after removing the finalizers of resource %s|%s/%s: %v", logicalClusterName, upstreamNamespace, upstreamObj.GetName(), err)
+		return err
+	}
+	klog.V(2).Infof("Updated resource %s|%s/%s after removing the finalizers", logicalClusterName, upstreamNamespace, upstreamObj.GetName())
+	return nil
 }

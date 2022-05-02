@@ -51,7 +51,7 @@ func deepEqualApartFromStatus(oldObj, newObj interface{}) bool {
 	// remove status annotation from oldObj and newObj before comparing
 	oldAnnotations := oldUnstrob.GetAnnotations()
 	for k := range oldAnnotations {
-		if !strings.HasPrefix(k, workloadv1alpha1.InternalClusterStatusAnnotationPrefix) {
+		if strings.HasPrefix(k, workloadv1alpha1.InternalClusterStatusAnnotationPrefix) {
 			delete(oldAnnotations, k)
 		}
 	}
@@ -268,33 +268,33 @@ func (c *Controller) applyToDownstream(ctx context.Context, gvr schema.GroupVers
 				}
 			}
 		}
-	}
 
-	// TODO: wipe things like finalizers, owner-refs and any other life-cycle fields. The life-cycle
-	//       should exclusively owned by the syncer. Let's not some Kubernetes magic interfere with it.
+		// TODO: wipe things like finalizers, owner-refs and any other life-cycle fields. The life-cycle
+		//       should exclusively owned by the syncer. Let's not some Kubernetes magic interfere with it.
 
-	// TODO(jmprusi): When using syncer virtual workspace we would check the DeletionTimestamp on the upstream object, instead of the DeletionTimestamp annotation,
-	//                as the virtual workspace will set the the deletionTimestamp() on the location view by a transformation.
-	intendedToBeRemovedFromLocation := upstreamObj.GetAnnotations()[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+c.pcluster] != ""
+		// TODO(jmprusi): When using syncer virtual workspace we would check the DeletionTimestamp on the upstream object, instead of the DeletionTimestamp annotation,
+		//                as the virtual workspace will set the the deletionTimestamp() on the location view by a transformation.
+		intendedToBeRemovedFromLocation := upstreamObj.GetAnnotations()[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+c.pcluster] != ""
 
-	// TODO(jmprusi): When using syncer virtual workspace this condition would not be necessary anymore, since directly tested on the virtual workspace side.
-	stillOwnedByExternalActorForLocation := upstreamObj.GetAnnotations()[workloadv1alpha1.ClusterFinalizerAnnotationPrefix+c.pcluster] != ""
+		// TODO(jmprusi): When using syncer virtual workspace this condition would not be necessary anymore, since directly tested on the virtual workspace side.
+		stillOwnedByExternalActorForLocation := upstreamObj.GetAnnotations()[workloadv1alpha1.ClusterFinalizerAnnotationPrefix+c.pcluster] != ""
 
-	if intendedToBeRemovedFromLocation && !stillOwnedByExternalActorForLocation {
-		if err := c.toClient.Resource(gvr).Namespace(downstreamNamespace).Delete(ctx, downstreamObj.GetName(), metav1.DeleteOptions{}); err != nil {
-			if errors.IsNotFound(err) {
-				// That's not an error.
-				// Just think about removing the finalizer from the KCP location-specific resource:
-				if err := c.removeUpstreamSyncerOwnership(ctx, gvr, upstreamObj.GetNamespace(), upstreamObj.GetName()); err != nil {
-					return err
+		if intendedToBeRemovedFromLocation && !stillOwnedByExternalActorForLocation {
+			if err := c.toClient.Resource(gvr).Namespace(downstreamNamespace).Delete(ctx, downstreamObj.GetName(), metav1.DeleteOptions{}); err != nil {
+				if errors.IsNotFound(err) {
+					// That's not an error.
+					// Just think about removing the finalizer from the KCP location-specific resource:
+					if err := removeUpstreamSyncerOwnership(ctx, gvr, c.fromClient, upstreamObj.GetNamespace(), c.pcluster, c.upstreamClusterName, upstreamObj.GetName()); err != nil {
+						return err
+					}
+					return nil
 				}
-				return nil
+				klog.Errorf("Error deleting %s %s/%s from downstream %s|%s/%s: %v", gvr.Resource, upstreamObj.GetNamespace(), upstreamObj.GetName(), upstreamObj.GetClusterName(), upstreamObj.GetNamespace(), upstreamObj.GetName(), err)
+				return err
 			}
-			klog.Infof("Error deleting %s %s/%s from downstream %s|%s/%s: %v", gvr.Resource, upstreamObj.GetNamespace(), upstreamObj.GetName(), upstreamObj.GetClusterName(), upstreamObj.GetNamespace(), upstreamObj.GetName(), err)
-			return err
+			klog.V(2).Infof("Deleted %s %s/%s from downstream %s|%s/%s", gvr.Resource, upstreamObj.GetNamespace(), downstreamObj.GetName(), upstreamObj.GetClusterName(), upstreamObj.GetNamespace(), upstreamObj.GetName())
+			return nil
 		}
-		klog.Infof("Deleted %s %s/%s from downstream %s|%s/%s", gvr.Resource, upstreamObj.GetNamespace(), downstreamObj.GetName(), upstreamObj.GetClusterName(), upstreamObj.GetNamespace(), upstreamObj.GetName())
-		return nil
 	}
 
 	// Marshalling the unstructured object is good enough as SSA patch

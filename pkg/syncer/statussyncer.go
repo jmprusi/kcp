@@ -23,7 +23,6 @@ import (
 	"github.com/kcp-dev/apimachinery/pkg/logicalcluster"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -72,56 +71,7 @@ func NewStatusSyncer(from, to *rest.Config, gvrs []string, kcpClusterName logica
 }
 
 func (c *Controller) deleteFromUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace, name string) error {
-	return c.removeUpstreamSyncerOwnership(ctx, gvr, upstreamNamespace, name)
-}
-
-func (c *Controller) removeUpstreamSyncerOwnership(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace, name string) error {
-	upstreamObj, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil && !errors.IsNotFound(err) {
-		return err
-	}
-	if errors.IsNotFound(err) {
-		return nil
-	}
-
-	// TODO(jmprusi): This check will need to be against "GetDeletionTimestamp()" when using the syncer virtual  workspace.
-	if upstreamObj.GetAnnotations()[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+c.pcluster] == "" {
-		// Do nothing: the object should not be deleted anymore for this location on the KCP side
-		return nil
-	}
-
-	// Remove the syncer finalizer.
-	currentFinalizers := upstreamObj.GetFinalizers()
-	desiredFinalizers := []string{}
-	for _, finalizer := range currentFinalizers {
-		if finalizer != syncerFinalizerNamePrefix+c.pcluster {
-			desiredFinalizers = append(desiredFinalizers, finalizer)
-		}
-	}
-	upstreamObj.SetFinalizers(desiredFinalizers)
-
-	//  TODO(jmprusi): This code block will be handled by the syncer virtual workspace, so we can remove it once
-	//                 the virtual workspace syncer is integrated
-	//  - Begin -
-	// Clean up the status annotation and the locationDeletionAnnotation.
-	annotations := upstreamObj.GetAnnotations()
-	delete(annotations, workloadv1alpha1.InternalClusterStatusAnnotationPrefix+c.pcluster)
-	delete(annotations, workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+c.pcluster)
-	delete(annotations, workloadv1alpha1.InternalClusterStatusAnnotationPrefix+c.pcluster)
-	upstreamObj.SetAnnotations(annotations)
-
-	// remove the cluster label.
-	upstreamLabels := upstreamObj.GetLabels()
-	delete(upstreamLabels, workloadv1alpha1.InternalClusterResourceStateLabelPrefix+c.pcluster)
-	upstreamObj.SetLabels(upstreamLabels)
-	// - End of block to be removed once the virtual workspace syncer is integrated -
-
-	if _, err := c.toClient.Resource(gvr).Namespace(upstreamObj.GetNamespace()).Update(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
-		klog.Errorf("Failed updating after removing the finalizers of resource %s|%s/%s: %v", c.upstreamClusterName, upstreamNamespace, upstreamObj.GetName(), err)
-		return err
-	}
-	klog.Infof("Updated resource %s|%s/%s after removing the finalizers", c.upstreamClusterName, upstreamNamespace, upstreamObj.GetName())
-	return nil
+	return removeUpstreamSyncerOwnership(ctx, gvr, c.toClient, upstreamNamespace, c.pcluster, c.upstreamClusterName, name)
 }
 
 func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.GroupVersionResource, upstreamNamespace string, downstreamObj *unstructured.Unstructured) error {
@@ -175,12 +125,13 @@ func (c *Controller) updateStatusInUpstream(ctx context.Context, gvr schema.Grou
 			return err
 		}
 		klog.Infof("Updated status of resource %s|%s/%s from pcluster namespace %s", c.upstreamClusterName, upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
-	} else {
-		if _, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
-			klog.Errorf("Failed updating status of resource %s|%s/%s from pcluster namespace %s: %v", c.upstreamClusterName, upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
-			return err
-		}
-		klog.Infof("Updated status of resource %s|%s/%s from pcluster namespace %s", c.upstreamClusterName, upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
+		return nil
 	}
+
+	if _, err := c.toClient.Resource(gvr).Namespace(upstreamNamespace).UpdateStatus(ctx, upstreamObj, metav1.UpdateOptions{}); err != nil {
+		klog.Errorf("Failed updating status of resource %s|%s/%s from pcluster namespace %s: %v", c.upstreamClusterName, upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace(), err)
+		return err
+	}
+	klog.Infof("Updated status of resource %s|%s/%s from pcluster namespace %s", c.upstreamClusterName, upstreamNamespace, upstreamObj.GetName(), downstreamObj.GetNamespace())
 	return nil
 }
