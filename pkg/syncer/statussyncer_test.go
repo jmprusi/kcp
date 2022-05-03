@@ -25,7 +25,7 @@ import (
 func TestDeepEqualFinalizersAndStatus(t *testing.T) {
 	for _, c := range []struct {
 		desc     string
-		old, new *unstructured.Unstructured
+		old, new interface{}
 		want     bool
 	}{{
 		desc: "both objects have same status",
@@ -249,6 +249,21 @@ func TestDeepEqualFinalizersAndStatus(t *testing.T) {
 				},
 			},
 			want: true,
+		}, {
+			desc: "one object is not unstructured",
+			old: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"status": map[string]string{
+						"cool": "yes",
+					},
+				},
+			},
+			new: map[string]interface{}{
+				"status": map[string]string{
+					"cool": "yes",
+				},
+			},
+			want: false,
 		}} {
 		t.Run(c.desc, func(t *testing.T) {
 			got := deepEqualFinalizersAndStatus(c.old, c.new)
