@@ -21,12 +21,12 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"strings"
 	"time"
 
 	"github.com/kcp-dev/apimachinery/pkg/logicalcluster"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
