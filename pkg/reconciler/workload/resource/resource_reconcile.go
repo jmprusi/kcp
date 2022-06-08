@@ -66,23 +66,23 @@ func (c *Controller) reconcileResource(ctx context.Context, lclusterName logical
 		return fmt.Errorf("error reconciling resource %s|%s/%s: error getting namespace: %w", lclusterName, obj.GetNamespace(), obj.GetName(), err)
 	}
 
-	// Set the per location DeletionTimestamps based on the object deletion timestamp.
+	annotationPatch, labelPatch := computePlacement(ns, obj)
+
+	// If the object DeletionTimestamp is set, we should set all locations deletion timestamps annotations to the same value.
 	if obj.GetDeletionTimestamp() != nil {
 		klog.V(2).Infof("Resource is being deleted; setting the deletion per locations timestamps for %s|%s/%s", lclusterName, obj.GetNamespace(), obj.GetName())
 		objAnnotations := obj.GetAnnotations()
-		if objAnnotations == nil {
-			objAnnotations = make(map[string]string)
-		}
 		objLocations, _ := locations(objAnnotations, obj.GetLabels(), false)
-		for location, _ := range objLocations {
+
+		if annotationPatch == nil {
+			annotationPatch = make(map[string]interface{})
+		}
+		for location := range objLocations {
 			if val, ok := objAnnotations[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+location]; !ok || val == "" {
-				objAnnotations[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+location] = obj.GetDeletionTimestamp().String()
+				annotationPatch[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+location] = obj.GetDeletionTimestamp().String()
 			}
 		}
-		obj.SetAnnotations(objAnnotations)
 	}
-
-	annotationPatch, labelPatch := computePlacement(ns, obj)
 
 	// create patch
 	if len(labelPatch) == 0 && len(annotationPatch) == 0 {
@@ -97,7 +97,7 @@ func (c *Controller) reconcileResource(ctx context.Context, lclusterName logical
 		}
 	}
 	if len(annotationPatch) > 0 {
-		if err := unstructured.SetNestedField(patch, labelPatch, "metadata", "annotations"); err != nil {
+		if err := unstructured.SetNestedField(patch, annotationPatch, "metadata", "annotations"); err != nil {
 			klog.Errorf("unexpected unstructured error: %v", err)
 			return err // should never happen
 		}
