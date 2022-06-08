@@ -66,6 +66,22 @@ func (c *Controller) reconcileResource(ctx context.Context, lclusterName logical
 		return fmt.Errorf("error reconciling resource %s|%s/%s: error getting namespace: %w", lclusterName, obj.GetNamespace(), obj.GetName(), err)
 	}
 
+	// Set the per location DeletionTimestamps based on the object deletion timestamp.
+	if obj.GetDeletionTimestamp() != nil {
+		klog.V(2).Infof("Resource is being deleted; setting the deletion per locations timestamps for %s|%s/%s", lclusterName, obj.GetNamespace(), obj.GetName())
+		objAnnotations := obj.GetAnnotations()
+		if objAnnotations == nil {
+			objAnnotations = make(map[string]string)
+		}
+		objLocations, _ := locations(objAnnotations, obj.GetLabels(), false)
+		for location, _ := range objLocations {
+			if val, ok := objAnnotations[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+location]; !ok || val == "" {
+				objAnnotations[workloadv1alpha1.InternalClusterDeletionTimestampAnnotationPrefix+location] = obj.GetDeletionTimestamp().String()
+			}
+		}
+		obj.SetAnnotations(objAnnotations)
+	}
+
 	annotationPatch, labelPatch := computePlacement(ns, obj)
 
 	// create patch
