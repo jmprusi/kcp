@@ -174,6 +174,11 @@ func (c *Controller) enqueueNamespace(obj interface{}) {
 		runtime.HandleError(err)
 		return
 	}
+
+	if val, ok := ns.Annotations[workloadv1alpha1.ExperimentalDisableSchedulingAnnotation]; ok && val == "true" {
+		klog.Infof("Namespace %s|%s has scheduling disabled, skipping", logicalcluster.From(ns), ns.GetName())
+	}
+
 	if err := c.enqueueResourcesForNamespace(ns); err != nil {
 		runtime.HandleError(err)
 		return

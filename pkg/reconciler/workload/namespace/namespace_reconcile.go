@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	utilserrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/clusters"
+	"k8s.io/klog/v2"
 
 	schedulingv1alpha1 "github.com/kcp-dev/kcp/pkg/apis/scheduling/v1alpha1"
 	workloadv1alpha1 "github.com/kcp-dev/kcp/pkg/apis/workload/v1alpha1"
@@ -42,6 +43,11 @@ type reconciler interface {
 }
 
 func (c *controller) reconcile(ctx context.Context, ns *corev1.Namespace) error {
+
+	if val, ok := ns.Annotations[workloadv1alpha1.ExperimentalDisableSchedulingAnnotation]; ok && val == "true" {
+		klog.Infof("Namespace %s|%s has scheduling disabled, skipping", logicalcluster.From(ns), ns.GetName())
+	}
+
 	reconcilers := []reconciler{
 		&bindNamespaceReconciler{
 			listPlacement:  c.listPlacement,
