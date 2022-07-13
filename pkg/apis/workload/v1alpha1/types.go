@@ -112,4 +112,8 @@ const (
 	// AnnotationSkipDefaultObjectCreation is the annotation key for an apiexport or apibinding indicating the other default resources
 	// has been created already. If the created default resource is deleted, it will not be recreated.
 	AnnotationSkipDefaultObjectCreation = "workload.kcp.dev/skip-default-object-creation"
+
+	// ExperimentalDisableSchedulingAnnotation is the annotation key for disabling the schedulers in a specific namespace. If set to "true" the
+	// namespace and all the resources inside it will not be scheduled automatically. This is an experimental annotation.
+	ExperimentalDisableSchedulingAnnotation = "experimental.workload.kcp.dev/scheduling-disabled"
 )
