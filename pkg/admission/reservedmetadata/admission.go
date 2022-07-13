@@ -41,6 +41,7 @@ var (
 	annotationAllowList = []string{
 		workloadv1alpha1.AnnotationSkipDefaultObjectCreation,
 		syncer.AdvancedSchedulingFeatureAnnotation,
+		workloadv1alpha1.ExperimentalDisableSchedulingAnnotation,
 	}
 	labelAllowList = []string{
 		"experimental.workload.kcp.dev/scheduling-disabled",
