@@ -82,23 +82,24 @@ func BuildVirtualWorkspace(
 			withoutRootPathPrefix := strings.TrimPrefix(urlPath, rootPathPrefix)
 
 			// Incoming requests to this virtual workspace will look like:
-			//  /services/syncer/root:org:ws/<sync-target-name>/clusters/*/api/v1/configmaps
+			//  /services/syncer/root:org:ws/<sync-target-uid>/<sync-target-name>/clusters/*/api/v1/configmaps
 			//                  └───────────────────────────┐
 			// Where the withoutRootPathPrefix starts here: ┘
-			parts := strings.SplitN(withoutRootPathPrefix, "/", 3)
-			if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+			parts := strings.SplitN(withoutRootPathPrefix, "/", 4)
+			if len(parts) < 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 				return
 			}
-			workloadCusterName := parts[1]
+			// We ignore the sync-target-uid, as that's there just to make the URL unique.
+			workloadCusterName := parts[2]
 			apiDomainKey := dynamiccontext.APIDomainKey(clusters.ToClusterAwareKey(logicalcluster.New(parts[0]), workloadCusterName))
 
 			realPath := "/"
-			if len(parts) > 2 {
-				realPath += parts[2]
+			if len(parts) > 3 {
+				realPath += parts[3]
 			}
 
-			//  /services/syncer/root:org:ws/<sync-target-name>/clusters/*/api/v1/configmaps
-			//                  ┌───────────────────────────────────┘
+			//  /services/syncer/root:org:ws/<sync-target-uid>/<sync-target-name>/clusters/*/api/v1/configmaps
+			//                  ┌───────────────────────────────────────────────┘
 			// We are now here: ┘
 			// Now, we parse out the logical cluster.
 			if !strings.HasPrefix(realPath, "/clusters/") {
