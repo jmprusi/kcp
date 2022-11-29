@@ -52,6 +52,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kube-openapi/pkg/util/sets"
 
+	kube124 "github.com/kcp-dev/kcp/config/rootcompute/kube-1.24"
 	apiresourcev1alpha1 "github.com/kcp-dev/kcp/pkg/apis/apiresource/v1alpha1"
 	tenancyv1alpha1 "github.com/kcp-dev/kcp/pkg/apis/tenancy/v1alpha1"
 	workloadv1alpha1 "github.com/kcp-dev/kcp/pkg/apis/workload/v1alpha1"
@@ -67,8 +68,9 @@ var embeddedResources embed.FS
 const (
 	SyncerSecretConfigKey   = "kubeconfig"
 	SyncerIDPrefix          = "kcp-syncer-"
+	UpsyncerSuffix          = "-up"
 	DNSIDPrefix             = "kcp-dns-"
-	MaxSyncTargetNameLength = validation.DNS1123SubdomainMaxLength - (9 + len(SyncerIDPrefix))
+	MaxSyncTargetNameLength = validation.DNS1123SubdomainMaxLength - (9 + len(SyncerIDPrefix) + len(UpsyncerSuffix))
 )
 
 // SyncOptions contains options for configuring a SyncTarget and its corresponding syncer.
@@ -609,6 +611,37 @@ func (o *SyncOptions) enableSyncerForWorkspace(ctx context.Context, config *rest
 		},
 		Subjects: subjects,
 		RoleRef:  roleRef,
+	}, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
+		return "", "", nil, err
+	}
+
+	// Grant the service account the Upsyncer permissions
+	upsyncerSyncerID := syncerID + UpsyncerSuffix
+	upsyncerRoleRef := rbacv1.RoleRef{
+		Kind:     "ClusterRole",
+		Name:     kube124.UpsyncerClusterRoleName,
+		APIGroup: "rbac.authorization.k8s.io",
+	}
+	_, err = kubeClient.RbacV1().ClusterRoleBindings().Get(ctx,
+		upsyncerSyncerID,
+		metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return "", "", nil, err
+	}
+	if err == nil {
+		if err := kubeClient.RbacV1().ClusterRoleBindings().Delete(ctx, upsyncerSyncerID, metav1.DeleteOptions{}); err != nil {
+			return "", "", nil, err
+		}
+	}
+
+	fmt.Fprintf(o.ErrOut, "Creating or updating cluster role binding %q to bind service account %q to cluster role %q.\n", upsyncerSyncerID, syncerID, kube124.UpsyncerClusterRoleName)
+	if _, err = kubeClient.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            upsyncerSyncerID,
+			OwnerReferences: syncTargetOwnerReferences,
+		},
+		Subjects: subjects,
+		RoleRef:  upsyncerRoleRef,
 	}, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
 		return "", "", nil, err
 	}
