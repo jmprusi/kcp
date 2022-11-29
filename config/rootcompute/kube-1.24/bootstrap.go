@@ -27,6 +27,11 @@ import (
 	confighelpers "github.com/kcp-dev/kcp/config/helpers"
 )
 
+const (
+	// UpsyncerClusterRoleName is the name of the ClusterRole that is used to grant permissions for upsyncing to syncers.
+	UpsyncerClusterRoleName = "compute:apiexport:kubernetes:upsyncer-permission-policy"
+)
+
 //go:embed *.yaml
 var KubeComputeFS embed.FS
 
